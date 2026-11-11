@@ -1,0 +1,72 @@
+[
+  {
+    "id": "M04",
+    "metric": "Delivery fraction",
+    "definition": "Unique delivered sequence IDs / generated readings",
+    "measurement_method": "Run fire-and-forget and persistent queue on identical online trace",
+    "environment": "macOS-26.2-arm64-arm-64bit; C++17 -O2; portable application core",
+    "workload": "120 wakes; offline wakes 20..39; first ACK lost for sequences divisible by 7",
+    "sample_count_or_duration": "120 generated readings",
+    "baseline": 83.33333333333333,
+    "final_result": 100.0,
+    "units": "percent",
+    "limitations": "Outage shorter than capacity; no real UART or NVS timing",
+    "kind": "deterministic simulation"
+  },
+  {
+    "id": "M05",
+    "metric": "Duplicate transmissions",
+    "definition": "Data frames received after their ID was already received",
+    "measurement_method": "Set insertion failure counter in model",
+    "environment": "macOS-26.2-arm64-arm-64bit; C++17 -O2; portable application core",
+    "workload": "Same outage and ACK-loss workload as M04",
+    "sample_count_or_duration": "120 readings; 197 final attempts",
+    "baseline": 0,
+    "final_result": 17,
+    "units": "frames",
+    "limitations": "Reliability costs extra transmissions; SQLite dedup checked separately",
+    "kind": "deterministic simulation"
+  },
+  {
+    "id": "M08",
+    "metric": "Firmware flash footprint",
+    "definition": "PlatformIO linked image usage",
+    "measurement_method": "Parse target linker size report",
+    "environment": "ESP32-WROOM; Xtensa GCC 8.4.0; Arduino 2.0.17; PlatformIO 6.9.0",
+    "workload": "Physical-input ESP32 firmware",
+    "sample_count_or_duration": "1 target build",
+    "baseline": null,
+    "final_result": 315701,
+    "units": "bytes",
+    "limitations": "No baseline firmware image; static RAM excludes runtime heap, queues and task stacks",
+    "kind": "cross-compilation"
+  },
+  {
+    "id": "M09",
+    "metric": "Firmware static RAM",
+    "definition": "PlatformIO linked image usage",
+    "measurement_method": "Parse target linker size report",
+    "environment": "ESP32-WROOM; Xtensa GCC 8.4.0; Arduino 2.0.17; PlatformIO 6.9.0",
+    "workload": "Physical-input ESP32 firmware",
+    "sample_count_or_duration": "1 target build",
+    "baseline": null,
+    "final_result": 23516,
+    "units": "bytes",
+    "limitations": "No baseline firmware image; static RAM excludes runtime heap, queues and task stacks",
+    "kind": "cross-compilation"
+  },
+  {
+    "id": "M10",
+    "metric": "Host core throughput",
+    "definition": "Completed workload units per measured wall second",
+    "measurement_method": "steady_clock around compiled C++ core; observable checksum",
+    "environment": "macOS-26.2-arm64-arm-64bit; C++17 -O2; portable application core",
+    "workload": "enqueue, seal, validate, ACK",
+    "sample_count_or_duration": "3 repetitions, durations 5.000044s,5.000237s,5.000090s",
+    "baseline": null,
+    "final_result": 294146.0305343763,
+    "units": "units/s",
+    "limitations": "Desktop benchmark only; no baseline speedup claim; min=293974.73050295573 max=296577.3752902287",
+    "kind": "host benchmark"
+  }
+]

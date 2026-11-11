@@ -1,0 +1,10 @@
+test_cpp_to_python_process_and_restart (__main__.Tests) ... ok
+test_durable_dedup_restart (__main__.Tests) ... ok
+test_malformed_and_crc (__main__.Tests) ... ok
+test_no_ack_when_storage_fails (__main__.Tests) ... ok
+test_stream_resync (__main__.Tests) ... ok
+
+----------------------------------------------------------------------
+Ran 5 tests in 0.063s
+
+OK

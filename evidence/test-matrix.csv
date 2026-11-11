@@ -1,0 +1,7 @@
+Requirement,Test,Result,Environment
+E1,Reference CRC; 48 single-bit corruptions; short frame; mocked NACK/read failure,PASS host,Host / deterministic simulation
+E2,"32-slot overflow, corrupted bytes, serialized reload, sequence exhaustion",PASS host,Host / deterministic simulation
+E3,"20-wake outage, lost ACK, backlog drain, duplicate suppression",PASS simulation,Host / deterministic simulation
+E3,C++ frames through Python subprocess; real SQLite restart; storage error,PASS host integration,Host / deterministic simulation
+E4,"Oversized line, CRC/range errors, conflicting sequence reuse",PASS host,Host / deterministic simulation
+E2/E5,"NVS power cut, stuck I2C bus, sleep current, real UART timing",PENDING hardware,Physical board

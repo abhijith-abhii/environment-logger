@@ -1,0 +1,1 @@
+PASS 420 assertions: CRC, mocked I2C, overflow, ACK, restart, corrupt storage

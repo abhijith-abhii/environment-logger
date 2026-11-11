@@ -1,0 +1,8 @@
+In file included from tests/test.cpp:12:
+include/logger.hpp:33:15: error: static assertion failed due to requirement 'sizeof(logger::Store) == 288': Persistence format changed; migrate version
+   33 | static_assert(sizeof(Store)==288,"Persistence format changed; migrate version");
+      |               ^~~~~~~~~~~~~~~~~~
+include/logger.hpp:33:28: note: expression evaluates to '284 == 288'
+   33 | static_assert(sizeof(Store)==288,"Persistence format changed; migrate version");
+      |               ~~~~~~~~~~~~~^~~~~
+1 error generated.
