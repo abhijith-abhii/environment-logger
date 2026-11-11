@@ -1,0 +1,12 @@
+flowchart TD
+  n0["Timer wake"]
+  n1["SHT31 plus CRC"]
+  n2["Persist 32 records"]
+  n3["UART send and ACK"]
+  n4["SQLite durable gateway"]
+  n5["60 s deep sleep"]
+  n0 --> n1
+  n1 --> n2
+  n2 --> n3
+  n3 --> n4
+  n4 --> n5

@@ -1,0 +1,231 @@
+{
+  "title": "Environmental telemetry logger",
+  "subtitle": "Persistent records and acknowledged delivery across outages",
+  "problem": "A hobby greenhouse operator wants temperature and humidity history even when the nearby gateway is unavailable. This prototype samples an SHT31, keeps a bounded persistent queue, sends records over a local 3.3 V UART link, and sleeps between cycles. UART is a bench link; remote deployment would need a suitable physical layer.",
+  "summary": "Each wake reads the sensor once, checks its CRC and saves a record. The oldest saved record is sent first. The computer gateway commits it to SQLite before acknowledging its sequence number. If that acknowledgment is lost, the device repeats the record; the database recognizes the sequence and avoids a second row. The ESP32 then sleeps for 60 seconds.",
+  "requirements": [
+    [
+      "E1",
+      "SHT31 0x44; 100 kHz; 20 ms conversion wait; CRC validation",
+      "Mocked transaction and corruption tests pass"
+    ],
+    [
+      "E2",
+      "32-record queue; version and CRC; <1 KiB store",
+      "284-byte format checked on host and target"
+    ],
+    [
+      "E3",
+      "3 attempts x 250 ms; at most 4 records/wake",
+      "Outage model and real local gateway tests pass"
+    ],
+    [
+      "E4",
+      "Drop newest on overflow; no send before successful save",
+      "Core policy tested; NVS faults need board"
+    ],
+    [
+      "E5",
+      "60 s sleep; <5 s active wake target",
+      "Sleep configured; power/timing unmeasured"
+    ]
+  ],
+  "wiring": [
+    [
+      "3V3",
+      "SHT31 VIN",
+      "Pull-ups must be to 3.3 V"
+    ],
+    [
+      "GND",
+      "SHT31 GND and USB TTL GND",
+      "Common reference"
+    ],
+    [
+      "GPIO21",
+      "SHT31 SDA",
+      "I2C data; breakout pull-up provided"
+    ],
+    [
+      "GPIO22",
+      "SHT31 SCL",
+      "I2C clock; breakout pull-up provided"
+    ],
+    [
+      "GPIO17 TX1",
+      "3.3 V USB TTL RX",
+      "Telemetry to gateway"
+    ],
+    [
+      "GPIO16 RX1",
+      "3.3 V USB TTL TX",
+      "Acknowledgment from gateway"
+    ],
+    [
+      "SHT31 ADDR",
+      "Leave default low",
+      "Address 0x44; not 0x45"
+    ]
+  ],
+  "bom": [
+    [
+      "ESP32 DevKitC WROOM 4 MB",
+      "1",
+      "USD 10-18 estimate"
+    ],
+    [
+      "Adafruit SHT31 2857",
+      "1",
+      "USD 13.95 observed"
+    ],
+    [
+      "3.3 V USB TTL adapter",
+      "1",
+      "USD 5-12 estimate"
+    ],
+    [
+      "USB cable, breadboard, jumpers",
+      "1 set",
+      "USD 3-5 estimate"
+    ]
+  ],
+  "arch": [
+    "Timer wake",
+    "SHT31 plus CRC",
+    "Persist 32 records",
+    "UART send and ACK",
+    "SQLite durable gateway",
+    "60 s deep sleep"
+  ],
+  "decisions": [
+    "The SHT31 driver issues command 0x2400, waits 20 ms and requests six bytes. Both two-byte fields must match CRC-8 polynomial 0x31 initialized to 0xff. Invalid or incomplete readings do not enter the queue. Integer centi-units avoid floating-point formatting ambiguity.",
+    "A 284-byte versioned store includes the queue, sequence allocator and drop counter plus CRC-32. It is saved as one NVS blob before any record is sent. A corrupt existing blob faults closed; it is not silently replaced with sequence 1. The format is little-endian and tied to this ABI; the static assertion catches layout changes.",
+    "ACK must match the oldest sequence. Each record gets at most three attempts of 250 ms; at most four records are tried per wake. Parser buffers and per-iteration input byte counts are bounded, so an endless noisy stream cannot indefinitely extend a deadline.",
+    "The gateway validates payload CRC, ranges and format, then commits SQLite with synchronous FULL. A duplicate with the same payload is acknowledged; a conflicting reuse of the same device/sequence ID is refused. The transaction is durable before ACK. This provides at-least-once transmission and deduplicated storage, not exactly-once transport.",
+    "One Arduino task owns the bus, queue and NVS. The task watchdog bounds unexpected hangs. Radio functions are not started. Deep sleep is configured after serial flush; development-board regulator, LEDs and USB circuitry mean low chip sleep current does not imply low board current."
+  ],
+  "tests": [
+    [
+      "E1",
+      "Reference CRC; 48 single-bit corruptions; short frame; mocked NACK/read failure",
+      "PASS host"
+    ],
+    [
+      "E2",
+      "32-slot overflow, corrupted bytes, serialized reload, sequence exhaustion",
+      "PASS host"
+    ],
+    [
+      "E3",
+      "20-wake outage, lost ACK, backlog drain, duplicate suppression",
+      "PASS simulation"
+    ],
+    [
+      "E3",
+      "C++ frames through Python subprocess; real SQLite restart; storage error",
+      "PASS host integration"
+    ],
+    [
+      "E4",
+      "Oversized line, CRC/range errors, conflicting sequence reuse",
+      "PASS host"
+    ],
+    [
+      "E2/E5",
+      "NVS power cut, stuck I2C bus, sleep current, real UART timing",
+      "PENDING hardware"
+    ]
+  ],
+  "failures": "The initial store-size assertion expected 288 bytes; compilation established the actual layout is 284 bytes and the assertion was corrected before recording final results. Review also tightened gateway sequence-conflict checks inside the transaction so competing writers cannot cause a conflicting payload to be acknowledged.",
+  "limitations": "A 32-record queue cannot survive an unbounded outage. At one reading per wake, it covers roughly 32 wake cycles, not exactly 32 minutes because the sleep interval follows active work. Flash writes every wake and ACK create wear; endurance has not been measured. Persistent format migration, secure authentication, real-time timestamps and a long-distance link are not implemented. CRC protects against accidental corruption, not an attacker. A stuck I2C line is retried on a later wake; no automatic bus-clock recovery is claimed.",
+  "experiments": [
+    "Measure current with a current profiler or shunt and oscilloscope over 30 complete wake/sleep cycles, disconnecting USB and avoiding back-power from UART. Integrate current over time. Report board input voltage, active time and mean sleep current before estimating battery life.",
+    "Disconnect the gateway for 20 wakes, restore it and compare generated sequence IDs with database rows. Then exceed 32 queued records to confirm newest-sample drops. Interrupt power during NVS save and after gateway commit but before ACK; inspect duplicates and retained records.",
+    "Hold SDA low and remove the sensor independently. Confirm bounded wake duration and no malformed record. Restore the sensor and measure the next valid wake. Force a watchdog timeout in a disposable test build and record reset reason."
+  ],
+  "walkthrough": [
+    [
+      "include/logger.hpp: crc8 / decode",
+      "Compare the datasheet BEEF -> 92 vector, then follow rounded integer conversion into centi-degrees and centi-percent."
+    ],
+    [
+      "include/logger.hpp: Store",
+      "Explain ring ownership, sequence allocation, seal/valid and why ACK must remove only the oldest entry."
+    ],
+    [
+      "src/main.cpp: setup",
+      "Follow read, enqueue, persist, send, ACK, persist, sleep. Explain both reset windows around ACK handling."
+    ],
+    [
+      "src/main.cpp: send_record",
+      "Show device ID, CRC payload, timeout subtraction, attempt limit and parser byte budget."
+    ],
+    [
+      "tools/gateway.py: Gateway.accept",
+      "Explain database primary key and transaction completion before ACK. CRC is checked before any database mutation."
+    ],
+    [
+      "tests/test_gateway.py",
+      "This executes actual local processes and SQLite. It does not model ESP32 flash physics."
+    ]
+  ],
+  "questions": [
+    [
+      "Why persist before sending?",
+      "If power fails after sending but before local persistence, the gateway might have a record whose ID the device later reuses. Persisting first preserves allocation and replay state."
+    ],
+    [
+      "Why can duplicates occur?",
+      "The gateway may commit a record and its ACK may be lost. The sender cannot distinguish that from data loss, so it retries."
+    ],
+    [
+      "Is this exactly-once delivery?",
+      "No. Transmission is at least once within the configured retry/storage bounds. The gateway uses a primary key to store one row per device and sequence."
+    ],
+    [
+      "Why is CRC needed on I2C?",
+      "An ACK confirms a byte transfer, not the integrity of the sensor measurement. SHT31 supplies CRC bytes for its data words."
+    ],
+    [
+      "What if the queue is full?",
+      "The newest sample is rejected and the loss counter increments. Older unacknowledged records retain their identity and order."
+    ],
+    [
+      "How is battery life estimated?",
+      "Measure average current across complete cycles first. Usable battery capacity divided by average current is an idealized estimate; derating, regulator efficiency and self-discharge must be explicit. No life figure is claimed here."
+    ],
+    [
+      "What if sequence numbers wrap?",
+      "Zero is reserved. After UINT32_MAX is allocated, new records are refused instead of reusing gateway identities. An explicit reprovisioning scheme would be a future improvement."
+    ],
+    [
+      "What happens after a corrupt store?",
+      "The firmware emits a fault and does not send. Silent reset to an empty queue could reuse IDs and hide lost records."
+    ],
+    [
+      "Why not Wi-Fi or MQTT?",
+      "A local UART gateway makes reliability and persistence testable without infrastructure. It isolates the protocol learning objective; a later radio adapter can preserve the same queue semantics."
+    ],
+    [
+      "What is the main deployment limitation?",
+      "The board power budget, flash wear, timestamps and physical link all need improvement or measurement. Host success establishes logic, not battery operation or environmental durability."
+    ]
+  ],
+  "mods": [
+    "Add an explicit provisioning epoch to device identity so erased devices can safely restart sequences.",
+    "Batch NVS updates or use FRAM, then quantify endurance and recovery tradeoffs.",
+    "Add a real-time clock and version the wire/store formats without breaking old data."
+  ],
+  "demo": [
+    "Run sh tools/test.sh and sh tools/simulate.sh.",
+    "Run python3 tests/test_gateway.py; show the actual process restart and duplicate tests.",
+    "Inspect trace.csv at wakes 20, 39 and after reconnect. Compare retained records and baseline losses.",
+    "Explain the ACK-loss duplicate counter and why the database still has one row per ID."
+  ],
+  "resume": [
+    "Built an AI-assisted C++ environmental logger with CRC-checked SHT31 transactions, a 32-record persistent queue and bounded acknowledged UART delivery.",
+    "Recovered 120 of 120 generated readings in a deterministic 20-wake outage simulation, versus 100 of 120 with fire-and-forget delivery.",
+    "Implemented and tested a SQLite gateway that commits before ACK and deduplicates retransmissions across process restarts; ESP32 firmware cross-compiled."
+  ],
+  "id": "environment-logger"
+}
